@@ -1,23 +1,28 @@
-name: Windows PCAP Engine
-
-# This tells the server to stay asleep until Render sends the "convert_etl" signal
+name: Windows Engine
 on:
   repository_dispatch:
     types: [convert_etl]
+  workflow_dispatch: # This allows you to click a button to test it!
 
 jobs:
-  process-etl:
+  convert:
     runs-on: windows-latest
     steps:
-      - name: Load Official Microsoft Converter
-        uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: 1. Download ETL file from Render
-        run: Invoke-WebRequest -Uri "${{ github.event.client_payload.etl_url }}" -OutFile "input.etl"
-
-      - name: 2. Run the Official Enterprise Conversion
-        run: .\etl2pcapng.exe input.etl output.pcap
-
-      - name: 3. Upload the perfect PCAP back to Render
+      - name: Process File
+        shell: pwsh
         run: |
-          curl.exe -X POST -F "file=@output.pcap" -F "taskId=${{ github.event.client_payload.task_id }}" "${{ github.event.client_payload.return_url }}"
+          $etlUrl = "${{ github.event.client_payload.etl_url }}"
+          $returnUrl = "${{ github.event.client_payload.return_url }}"
+          $taskId = "${{ github.event.client_payload.task_id }}"
+          
+          Write-Host "Downloading from: $etlUrl"
+          Invoke-WebRequest -Uri $etlUrl -OutFile "input.etl"
+          
+          Write-Host "Converting..."
+          .\etl2pcapng.exe input.etl output.pcap
+          
+          Write-Host "Sending back to: $returnUrl"
+          curl.exe -X POST -F "file=@output.pcap" -F "taskId=$taskId" $returnUrl
