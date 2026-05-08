@@ -12,7 +12,6 @@ app.use(express.json());
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-// Allows GitHub to download the ETL from Render
 app.use('/files', express.static(uploadDir));
 
 const storage = multer.diskStorage({
@@ -29,7 +28,7 @@ app.post('/api/convert', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file' });
 
     if (!process.env.GITHUB_TOKEN) {
-        console.error("🚨 GITHUB_TOKEN MISSING IN RENDER ENV VARS");
+        console.error("🚨 GITHUB_TOKEN MISSING");
         return res.status(500).json({ error: 'Server misconfiguration' });
     }
 
@@ -41,16 +40,15 @@ app.post('/api/convert', upload.single('file'), async (req, res) => {
     const returnUrl = `${renderHost}/api/webhook/return`;
 
     try {
-        console.log(`[TRIGGER] Pinging GitHub for Task: ${taskId}`);
-        
-        // 🚨 DOUBLE CHECK: Ensure this matches your GitHub URL exactly
         const githubRepo = 'rashidaminbuhroo-ux/etl-backend'; 
+        console.log(`[TRIGGER] Pinging: https://api.github.com/repos/${githubRepo}/dispatches`);
         
         const response = await fetch(`https://api.github.com/repos/${githubRepo}/dispatches`, {
             method: 'POST',
             headers: {
                 'Accept': 'application/vnd.github.v3+json',
                 'Authorization': `token ${process.env.GITHUB_TOKEN.trim()}`,
+                'User-Agent': 'Render-NodeJS-App', // CRITICAL ADDITION
                 'X-GitHub-Api-Version': '2022-11-28',
                 'Content-Type': 'application/json'
             },
