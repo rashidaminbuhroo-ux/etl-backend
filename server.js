@@ -21,7 +21,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 const tasks = {};
 
-app.get('/', (req, res) => res.send('🚀 Converter API is Online'));
+app.get('/', (req, res) => res.send('🚀 Python Converter API is Online'));
 
 app.post('/api/convert', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file' });
@@ -29,25 +29,24 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
     const taskId = uuidv4();
     const inputPath = req.file.path;
     const outputPath = path.join(uploadDir, `${taskId}.pcap`);
-    const exePath = path.join(__dirname, 'etl2pcapng.exe');
 
     tasks[taskId] = { status: 'processing', progress: 0 };
 
     let prog = 0;
     const interval = setInterval(() => { if (prog < 90) tasks[taskId].progress = (prog += 10); }, 500);
 
-    const cmd = `wine64 "${exePath}" "${inputPath}" "${outputPath}"`;
+    // ✅ THE NEW COMMAND: Using the Airbus Python ETL Parser
+    const cmd = `etl2pcap -i "${inputPath}" -o "${outputPath}"`;
     console.log(`[EXEC] Running command: ${cmd}`);
 
     exec(cmd, (error, stdout, stderr) => {
         clearInterval(interval);
 
-        // 🚨 WE NEED TO SEE THESE LOGS IN RENDER 🚨
-        console.log("\n====== WINE DEBUG LOGS ======");
+        console.log("\n====== PYTHON CONVERTER LOGS ======");
         if (error) console.error(`[ERROR]:`, error.message);
         if (stdout) console.log(`[STDOUT]:`, stdout);
         if (stderr) console.error(`[STDERR]:`, stderr);
-        console.log("=============================\n");
+        console.log("===================================\n");
 
         setTimeout(() => {
             if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
