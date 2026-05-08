@@ -1,0 +1,23 @@
+name: Windows PCAP Engine
+
+# This tells the server to stay asleep until Render sends the "convert_etl" signal
+on:
+  repository_dispatch:
+    types: [convert_etl]
+
+jobs:
+  process-etl:
+    runs-on: windows-latest
+    steps:
+      - name: Load Official Microsoft Converter
+        uses: actions/checkout@v3
+
+      - name: 1. Download ETL file from Render
+        run: Invoke-WebRequest -Uri "${{ github.event.client_payload.etl_url }}" -OutFile "input.etl"
+
+      - name: 2. Run the Official Enterprise Conversion
+        run: .\etl2pcapng.exe input.etl output.pcap
+
+      - name: 3. Upload the perfect PCAP back to Render
+        run: |
+          curl.exe -X POST -F "file=@output.pcap" -F "taskId=${{ github.event.client_payload.task_id }}" "${{ github.event.client_payload.return_url }}"
