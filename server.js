@@ -36,20 +36,26 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
     let prog = 0;
     const interval = setInterval(() => { if (prog < 90) tasks[taskId].progress = (prog += 10); }, 500);
 
-    const cmd = `wine "${exePath}" "${inputPath}" "${outputPath}"`;
+    const cmd = `wine64 "${exePath}" "${inputPath}" "${outputPath}"`;
+    console.log(`[EXEC] Running command: ${cmd}`);
 
-    exec(cmd, (error) => {
+    exec(cmd, (error, stdout, stderr) => {
         clearInterval(interval);
-        
-        // Wait 2 seconds for Linux to finish writing the file
+
+        // 🚨 WE NEED TO SEE THESE LOGS IN RENDER 🚨
+        console.log("\n====== WINE DEBUG LOGS ======");
+        if (error) console.error(`[ERROR]:`, error.message);
+        if (stdout) console.log(`[STDOUT]:`, stdout);
+        if (stderr) console.error(`[STDERR]:`, stderr);
+        console.log("=============================\n");
+
         setTimeout(() => {
-            // CHECK IF FILE EXISTS AND IS LARGER THAN 0 BYTES
             if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
                 tasks[taskId].status = 'completed';
                 tasks[taskId].progress = 100;
                 tasks[taskId].downloadUrl = `/api/download/${taskId}`;
             } else {
-                tasks[taskId].status = 'error'; // This stops the fake 0-byte success
+                tasks[taskId].status = 'error';
             }
             if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
         }, 2000); 
