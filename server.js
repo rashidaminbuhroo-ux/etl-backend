@@ -7,7 +7,14 @@ const fs = require('fs');
 const { exec } = require('child_process');
 
 const app = express();
-app.use(cors());
+
+// ✅ UPDATED CORS: This allows your GitHub website to talk to Render
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type']
+}));
+
 app.use(express.json());
 
 const uploadDir = path.join(__dirname, 'uploads');
@@ -30,6 +37,11 @@ const upload = multer({
 
 const tasks = {};
 
+// ✅ ADDED: A root route so you can see if the backend is alive in your browser
+app.get('/', (req, res) => {
+    res.send('🚀 ETL to PCAP API is Live and Ready!');
+});
+
 app.post('/api/convert', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
 
@@ -47,7 +59,6 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
         }
     }, 500);
 
-    // Run Windows .exe via Wine on Linux server
     const cmd = `wine64 etl2pcapng.exe "${inputPath}" "${outputPath}"`;
 
     exec(cmd, (error, stdout, stderr) => {
