@@ -7,14 +7,7 @@ const fs = require('fs');
 const { exec } = require('child_process');
 
 const app = express();
-
-// ✅ CORS fixed for Global Access
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type']
-}));
-
+app.use(cors({ origin: '*', methods: ['GET', 'POST'] }));
 app.use(express.json());
 
 const uploadDir = path.join(__dirname, 'uploads');
@@ -25,88 +18,53 @@ const storage = multer.diskStorage({
     filename: (req, file, cb) => cb(null, `${uuidv4()}-${file.originalname}`)
 });
 
-const upload = multer({ 
-    storage,
-    fileFilter: (req, file, cb) => {
-        if (path.extname(file.originalname).toLowerCase() !== '.etl') {
-            return cb(new Error('Only .etl files are allowed'));
-        }
-        cb(null, true);
-    }
-});
-
+const upload = multer({ storage });
 const tasks = {};
 
-app.get('/', (req, res) => {
-    res.send('🚀 ETL to PCAP API is Live and Ready!');
-});
+app.get('/', (req, res) => res.send('🚀 Converter API is Online'));
 
 app.post('/api/convert', upload.single('file'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+    if (!req.file) return res.status(400).json({ error: 'No file' });
 
     const taskId = uuidv4();
     const inputPath = req.file.path;
     const outputPath = path.join(uploadDir, `${taskId}.pcap`);
     const exePath = path.join(__dirname, 'etl2pcapng.exe');
 
-    tasks[taskId] = { status: 'processing', progress: 0, file: req.file.originalname, downloadUrl: null };
+    tasks[taskId] = { status: 'processing', progress: 0 };
 
-    let progress = 0;
-    const progressInterval = setInterval(() => {
-        if (progress < 90) {
-            progress += 10;
-            tasks[taskId].progress = progress;
-        }
-    }, 500);
+    let prog = 0;
+    const interval = setInterval(() => { if (prog < 90) tasks[taskId].progress = (prog += 10); }, 500);
 
-    // ✅ BULLETPROOF COMMAND: Uses full paths and standard wine
     const cmd = `wine "${exePath}" "${inputPath}" "${outputPath}"`;
 
-    console.log(`Executing: ${cmd}`);
-
-    exec(cmd, (error, stdout, stderr) => {
-        clearInterval(progressInterval);
-
-        // Give Linux a split second to finalize the file writing
+    exec(cmd, (error) => {
+        clearInterval(interval);
+        
+        // Wait 2 seconds for Linux to finish writing the file
         setTimeout(() => {
-            if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
-                console.error(`Conversion Failed or 0-byte file generated.`);
-                tasks[taskId].status = 'error';
-                return;
+            // CHECK IF FILE EXISTS AND IS LARGER THAN 0 BYTES
+            if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+                tasks[taskId].status = 'completed';
+                tasks[taskId].progress = 100;
+                tasks[taskId].downloadUrl = `/api/download/${taskId}`;
+            } else {
+                tasks[taskId].status = 'error'; // This stops the fake 0-byte success
             }
-
-            tasks[taskId].progress = 100;
-            tasks[taskId].status = 'completed';
-            tasks[taskId].downloadUrl = `/api/download/${taskId}`;
-            
-            // Cleanup the heavy .etl file
-            fs.unlink(inputPath, () => console.log('Original ETL cleaned up.'));
-        }, 1000); 
+            if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+        }, 2000); 
     });
 
-    res.json({ taskId, message: 'Conversion started' });
+    res.json({ taskId });
 });
 
-app.get('/api/status/:taskId', (req, res) => {
-    const task = tasks[req.params.taskId];
-    if (!task) return res.status(404).json({ error: 'Task not found' });
-    res.json(task);
-});
+app.get('/api/status/:taskId', (req, res) => res.json(tasks[req.params.taskId] || { status: 'error' }));
 
 app.get('/api/download/:taskId', (req, res) => {
-    const outputPath = path.join(uploadDir, `${req.params.taskId}.pcap`);
-    if (!fs.existsSync(outputPath)) return res.status(404).json({ error: 'File not found.' });
-
-    res.download(outputPath, `converted-${req.params.taskId}.pcap`, (err) => {
-        if (!err) {
-            // Keep the file for 1 minute then delete so user actually gets the data
-            setTimeout(() => {
-                if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-                delete tasks[req.params.taskId];
-            }, 60000);
-        }
-    });
+    const file = path.join(uploadDir, `${req.params.taskId}.pcap`);
+    if (fs.existsSync(file)) res.download(file);
+    else res.status(404).send('File not found');
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Running on ${PORT}`));
