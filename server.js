@@ -8,7 +8,7 @@ const { exec } = require('child_process');
 
 const app = express();
 
-// ✅ UPDATED CORS: This allows your GitHub website to talk to Render
+// ✅ CORS fixed for Global Access
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST'],
@@ -18,7 +18,7 @@ app.use(cors({
 app.use(express.json());
 
 const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
@@ -37,7 +37,6 @@ const upload = multer({
 
 const tasks = {};
 
-// ✅ ADDED: A root route so you can see if the backend is alive in your browser
 app.get('/', (req, res) => {
     res.send('🚀 ETL to PCAP API is Live and Ready!');
 });
@@ -48,6 +47,7 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
     const taskId = uuidv4();
     const inputPath = req.file.path;
     const outputPath = path.join(uploadDir, `${taskId}.pcap`);
+    const exePath = path.join(__dirname, 'etl2pcapng.exe');
 
     tasks[taskId] = { status: 'processing', progress: 0, file: req.file.originalname, downloadUrl: null };
 
@@ -59,22 +59,29 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
         }
     }, 500);
 
-    const cmd = `wine64 etl2pcapng.exe "${inputPath}" "${outputPath}"`;
+    // ✅ BULLETPROOF COMMAND: Uses full paths and standard wine
+    const cmd = `wine "${exePath}" "${inputPath}" "${outputPath}"`;
+
+    console.log(`Executing: ${cmd}`);
 
     exec(cmd, (error, stdout, stderr) => {
         clearInterval(progressInterval);
 
-        if (!fs.existsSync(outputPath)) {
-            console.error(`Conversion Failed. PCAP not generated.`);
-            tasks[taskId].status = 'error';
-            return;
-        }
+        // Give Linux a split second to finalize the file writing
+        setTimeout(() => {
+            if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
+                console.error(`Conversion Failed or 0-byte file generated.`);
+                tasks[taskId].status = 'error';
+                return;
+            }
 
-        tasks[taskId].progress = 100;
-        tasks[taskId].status = 'completed';
-        tasks[taskId].downloadUrl = `/api/download/${taskId}`;
-        
-        fs.unlink(inputPath, () => console.log('Original ETL cleaned up.'));
+            tasks[taskId].progress = 100;
+            tasks[taskId].status = 'completed';
+            tasks[taskId].downloadUrl = `/api/download/${taskId}`;
+            
+            // Cleanup the heavy .etl file
+            fs.unlink(inputPath, () => console.log('Original ETL cleaned up.'));
+        }, 1000); 
     });
 
     res.json({ taskId, message: 'Conversion started' });
@@ -92,8 +99,11 @@ app.get('/api/download/:taskId', (req, res) => {
 
     res.download(outputPath, `converted-${req.params.taskId}.pcap`, (err) => {
         if (!err) {
-            fs.unlink(outputPath, () => console.log('Converted PCAP cleaned up.'));
-            delete tasks[req.params.taskId];
+            // Keep the file for 1 minute then delete so user actually gets the data
+            setTimeout(() => {
+                if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+                delete tasks[req.params.taskId];
+            }, 60000);
         }
     });
 });
