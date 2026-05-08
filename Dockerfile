@@ -2,11 +2,12 @@ FROM node:18-bullseye
 
 WORKDIR /usr/src/app
 
-# Install Python, pip, and dos2unix (the tool to scrub Windows formatting)
+# Install Python and download the raw binary carver script
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 python3-pip dos2unix && \
-    pip3 install etl-parser && \
-    find /usr/local/bin -name "etl2pcap" -exec dos2unix {} +
+    apt-get install -y --no-install-recommends python3 wget dos2unix && \
+    wget https://raw.githubusercontent.com/aaptel/etl2pcap/master/etl2pcap.py -O etl2pcap.py && \
+    dos2unix etl2pcap.py && \
+    chmod +x etl2pcap.py
 
 COPY package*.json ./
 RUN npm install
