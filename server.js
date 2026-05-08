@@ -21,7 +21,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 const tasks = {};
 
-app.get('/', (req, res) => res.send('🚀 Python Converter API is Online'));
+app.get('/', (req, res) => res.send('🚀 Python R&D Converter API is Online'));
 
 app.post('/api/convert', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file' });
@@ -35,8 +35,8 @@ app.post('/api/convert', upload.single('file'), (req, res) => {
     let prog = 0;
     const interval = setInterval(() => { if (prog < 90) tasks[taskId].progress = (prog += 10); }, 500);
 
-    // ✅ THE NEW COMMAND: Using the Airbus Python ETL Parser
-    const cmd = `etl2pcap -i "${inputPath}" -o "${outputPath}"`;
+    // ✅ THE R&D COMMAND: Binary Packet Carving via raw Python script
+    const cmd = `python3 etl2pcap.py "${inputPath}" "${outputPath}"`;
     console.log(`[EXEC] Running command: ${cmd}`);
 
     exec(cmd, (error, stdout, stderr) => {
